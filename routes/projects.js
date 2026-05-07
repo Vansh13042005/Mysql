@@ -5,14 +5,10 @@ import auth from "../middleware/auth.js";
 import { supabase } from "../config/supabase.js";
 
 const router = express.Router();
-
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-// ===============================
 // GET PROJECTS
-// ===============================
-
 router.get("/", async (req, res) => {
   try {
     const result = await pool.query(
@@ -24,10 +20,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-// ===============================
 // CREATE PROJECT
-// ===============================
-
 router.post("/", auth, upload.single("image"), async (req, res) => {
   try {
     const { title, description, category, tech, link, github } = req.body;
@@ -68,10 +61,7 @@ router.post("/", auth, upload.single("image"), async (req, res) => {
   }
 });
 
-// ===============================
 // DELETE PROJECT
-// ===============================
-
 router.delete("/:id", auth, async (req, res) => {
   try {
     await pool.query("DELETE FROM projects WHERE id=$1", [req.params.id]);
