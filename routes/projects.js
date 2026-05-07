@@ -4,21 +4,24 @@ import path from "path";
 import fs from "fs";
 import auth from "../middleware/auth.js";
 import { pool } from "../server.js";
+import { uploadToSupabase } from "../utils/upload.js";
 
 const router = express.Router();
 
-// ─────────────────────────────────────────────
-// ✅ MULTER SETUP
-// ─────────────────────────────────────────────
+// ===============================
+// TEMP LOCAL FOLDER
+// ===============================
 
 const UPLOAD_DIR = "uploads/projects";
 
-// Create folder if not exists
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
 
-// Storage config
+// ===============================
+// MULTER
+// ===============================
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, UPLOAD_DIR);
@@ -31,7 +34,6 @@ const storage = multer.diskStorage({
   },
 });
 
-// File validation
 const fileFilter = (req, file, cb) => {
   const allowed = [
     "image/jpeg",
@@ -44,46 +46,23 @@ const fileFilter = (req, file, cb) => {
     cb(null, true);
   } else {
     cb(
-      new Error("Only JPEG, PNG, WEBP images are allowed"),
+      new Error("Only JPEG, PNG, WEBP allowed"),
       false
     );
   }
 };
 
-// Multer upload
 const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB
+    fileSize: 5 * 1024 * 1024,
   },
 });
 
-// ─────────────────────────────────────────────
-// ✅ DELETE OLD IMAGE
-// ─────────────────────────────────────────────
-
-const deleteImage = (imageUrl) => {
-  try {
-    if (!imageUrl) return;
-
-    const urlPath = new URL(imageUrl).pathname;
-
-    const filepath = urlPath.replace(/^\//, "");
-
-    if (fs.existsSync(filepath)) {
-      fs.unlinkSync(filepath);
-    }
-  } catch {
-    if (fs.existsSync(imageUrl)) {
-      fs.unlinkSync(imageUrl);
-    }
-  }
-};
-
-// ─────────────────────────────────────────────
-// ✅ GET ALL PROJECTS
-// ─────────────────────────────────────────────
+// ===============================
+// GET PROJECTS
+// ===============================
 
 router.get("/", async (req, res) => {
   try {
@@ -95,6 +74,7 @@ router.get("/", async (req, res) => {
       success: true,
       data: result.rows,
     });
+
   } catch (error) {
     res.status(500).json({
       error: error.message,
@@ -102,9 +82,9 @@ router.get("/", async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────────
-// ✅ CREATE PROJECT
-// ─────────────────────────────────────────────
+// ===============================
+// CREATE PROJECT
+// ===============================
 
 router.post(
   "/",
@@ -112,6 +92,7 @@ router.post(
   upload.single("image"),
   async (req, res) => {
     try {
+
       const {
         title,
         description,
@@ -123,12 +104,16 @@ router.post(
 
       let imageUrl = null;
 
-      // Build image URL
-      if (req.file) {
-        const protocol = req.protocol;
-        const host = req.get("host");
+      // ===============================
+      // UPLOAD TO SUPABASE
+      // ===============================
 
-        imageUrl = `${protocol}://${host}/uploads/projects/${req.file.filename}`;
+      if (req.file) {
+
+        imageUrl = await uploadToSupabase(req.file);
+
+        // delete temp file
+        fs.unlinkSync(req.file.path);
       }
 
       const result = await pool.query(
@@ -161,7 +146,11 @@ router.post(
         success: true,
         data: result.rows[0],
       });
+
     } catch (error) {
+
+      console.log("PROJECT CREATE ERROR:", error);
+
       res.status(500).json({
         error: error.message,
       });
@@ -169,9 +158,9 @@ router.post(
   }
 );
 
-// ─────────────────────────────────────────────
-// ✅ UPDATE PROJECT
-// ─────────────────────────────────────────────
+// ===============================
+// UPDATE PROJECT
+// ===============================
 
 router.put(
   "/:id",
@@ -179,6 +168,7 @@ router.put(
   upload.single("image"),
   async (req, res) => {
     try {
+
       const { id } = req.params;
 
       const {
@@ -190,7 +180,6 @@ router.put(
         github,
       } = req.body;
 
-      // Get old image
       const existing = await pool.query(
         "SELECT image FROM projects WHERE id=$1",
         [id]
@@ -198,17 +187,13 @@ router.put(
 
       let imageUrl = existing.rows[0]?.image || null;
 
-      // Upload new image
+      // upload new image
       if (req.file) {
-        // Delete old image
-        if (imageUrl) {
-          deleteImage(imageUrl);
-        }
 
-        const protocol = req.protocol;
-        const host = req.get("host");
+        imageUrl = await uploadToSupabase(req.file);
 
-        imageUrl = `${protocol}://${host}/uploads/projects/${req.file.filename}`;
+        // delete temp file
+        fs.unlinkSync(req.file.path);
       }
 
       const result = await pool.query(
@@ -241,7 +226,11 @@ router.put(
         success: true,
         data: result.rows[0],
       });
+
     } catch (error) {
+
+      console.log("PROJECT UPDATE ERROR:", error);
+
       res.status(500).json({
         error: error.message,
       });
@@ -249,23 +238,13 @@ router.put(
   }
 );
 
-// ─────────────────────────────────────────────
-// ✅ DELETE PROJECT
-// ─────────────────────────────────────────────
+// ===============================
+// DELETE PROJECT
+// ===============================
 
 router.delete("/:id", auth, async (req, res) => {
   try {
-    const existing = await pool.query(
-      "SELECT image FROM projects WHERE id=$1",
-      [req.params.id]
-    );
 
-    // Delete image
-    if (existing.rows[0]?.image) {
-      deleteImage(existing.rows[0].image);
-    }
-
-    // Delete project
     await pool.query(
       "DELETE FROM projects WHERE id=$1",
       [req.params.id]
@@ -273,9 +252,11 @@ router.delete("/:id", auth, async (req, res) => {
 
     res.json({
       success: true,
-      message: "Project deleted successfully",
+      message: "Deleted",
     });
+
   } catch (error) {
+
     res.status(500).json({
       error: error.message,
     });
