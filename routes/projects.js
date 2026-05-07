@@ -1,63 +1,19 @@
 import express from "express";
 import multer from "multer";
-import path from "path";
-import fs from "fs";
-import auth from "../middleware/auth.js";
 import { pool } from "../server.js";
-import { uploadToSupabase } from "../utils/upload.js";
+import auth from "../middleware/auth.js";
+import { supabase } from "../config/supabase.js";
 
 const router = express.Router();
 
 // ===============================
-// TEMP LOCAL FOLDER
+// MULTER MEMORY STORAGE
 // ===============================
 
-const UPLOAD_DIR = "uploads/projects";
-
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
-
-// ===============================
-// MULTER
-// ===============================
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, UPLOAD_DIR);
-  },
-
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-
-    cb(null, `project_${Date.now()}${ext}`);
-  },
-});
-
-const fileFilter = (req, file, cb) => {
-  const allowed = [
-    "image/jpeg",
-    "image/jpg",
-    "image/png",
-    "image/webp",
-  ];
-
-  if (allowed.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(
-      new Error("Only JPEG, PNG, WEBP allowed"),
-      false
-    );
-  }
-};
+const storage = multer.memoryStorage();
 
 const upload = multer({
   storage,
-  fileFilter,
-  limits: {
-    fileSize: 5 * 1024 * 1024,
-  },
 });
 
 // ===============================
@@ -75,9 +31,9 @@ router.get("/", async (req, res) => {
       data: result.rows,
     });
 
-  } catch (error) {
+  } catch (err) {
     res.status(500).json({
-      error: error.message,
+      error: err.message,
     });
   }
 });
@@ -91,6 +47,7 @@ router.post(
   auth,
   upload.single("image"),
   async (req, res) => {
+
     try {
 
       const {
@@ -104,17 +61,37 @@ router.post(
 
       let imageUrl = null;
 
-      // ===============================
-      // UPLOAD TO SUPABASE
-      // ===============================
+      // =========================
+      // UPLOAD IMAGE TO SUPABASE
+      // =========================
 
       if (req.file) {
 
-        imageUrl = await uploadToSupabase(req.file);
+        const fileName = `project_${Date.now()}_${req.file.originalname}`;
 
-        // delete temp file
-        fs.unlinkSync(req.file.path);
+        const { error } = await supabase.storage
+          .from("projects")
+          .upload(fileName, req.file.buffer, {
+            contentType: req.file.mimetype,
+          });
+
+        if (error) {
+          console.log("SUPABASE ERROR:", error);
+          return res.status(500).json({
+            error: error.message,
+          });
+        }
+
+        const { data } = supabase.storage
+          .from("projects")
+          .getPublicUrl(fileName);
+
+        imageUrl = data.publicUrl;
       }
+
+      // =========================
+      // INSERT INTO POSTGRESQL
+      // =========================
 
       const result = await pool.query(
         `
@@ -142,97 +119,17 @@ router.post(
         ]
       );
 
-      res.status(201).json({
-        success: true,
-        data: result.rows[0],
-      });
-
-    } catch (error) {
-
-      console.log("PROJECT CREATE ERROR:", error);
-
-      res.status(500).json({
-        error: error.message,
-      });
-    }
-  }
-);
-
-// ===============================
-// UPDATE PROJECT
-// ===============================
-
-router.put(
-  "/:id",
-  auth,
-  upload.single("image"),
-  async (req, res) => {
-    try {
-
-      const { id } = req.params;
-
-      const {
-        title,
-        description,
-        category,
-        tech,
-        link,
-        github,
-      } = req.body;
-
-      const existing = await pool.query(
-        "SELECT image FROM projects WHERE id=$1",
-        [id]
-      );
-
-      let imageUrl = existing.rows[0]?.image || null;
-
-      // upload new image
-      if (req.file) {
-
-        imageUrl = await uploadToSupabase(req.file);
-
-        // delete temp file
-        fs.unlinkSync(req.file.path);
-      }
-
-      const result = await pool.query(
-        `
-        UPDATE projects
-        SET
-          title=$1,
-          description=$2,
-          category=$3,
-          tech=$4,
-          link=$5,
-          github=$6,
-          image=$7
-        WHERE id=$8
-        RETURNING *
-        `,
-        [
-          title,
-          description,
-          category,
-          tech,
-          link,
-          github,
-          imageUrl,
-          id,
-        ]
-      );
-
       res.json({
         success: true,
         data: result.rows[0],
       });
 
-    } catch (error) {
+    } catch (err) {
 
-      console.log("PROJECT UPDATE ERROR:", error);
+      console.log("PROJECT CREATE ERROR:", err);
 
       res.status(500).json({
-        error: error.message,
+        error: err.message,
       });
     }
   }
@@ -243,6 +140,7 @@ router.put(
 // ===============================
 
 router.delete("/:id", auth, async (req, res) => {
+
   try {
 
     await pool.query(
@@ -252,13 +150,13 @@ router.delete("/:id", auth, async (req, res) => {
 
     res.json({
       success: true,
-      message: "Deleted",
+      message: "Project deleted",
     });
 
-  } catch (error) {
+  } catch (err) {
 
     res.status(500).json({
-      error: error.message,
+      error: err.message,
     });
   }
 });
