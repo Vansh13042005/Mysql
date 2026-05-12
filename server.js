@@ -1,5 +1,7 @@
-import express from "express";
 import dotenv from "dotenv";
+dotenv.config();
+
+import express from "express";
 import cors from "cors";
 import pkg from "pg";
 
@@ -16,27 +18,18 @@ import dashboardRoutes from "./routes/dashboard.js";
 import aboutRoutes from "./routes/about.js";
 import resumeRoutes from "./routes/resume.js";
 import feedbackRoutes from "./routes/feedback.js";
-dotenv.config();
 
 const app = express();
 
-// ==================
-// ✅ MIDDLEWARE (FIXED)
-// ==================
 app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true })); // 🔥 IMPORTANT FIX
-
-// ==================
-// ✅ POSTGRESQL CONNECTION
-// ==================
+app.use(express.urlencoded({ extended: true }));
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
 });
 
-// Test DB Connection
 (async () => {
   try {
     const client = await pool.connect();
@@ -46,10 +39,6 @@ export const pool = new Pool({
     console.log("❌ DB Error:", err.message);
   }
 })();
-
-// ==================
-// ✅ ROUTES
-// ==================
 
 app.use("/api/auth", authRoutes);
 app.use("/api/experience", experienceRoutes);
@@ -62,9 +51,6 @@ app.use("/api/resume", resumeRoutes);
 app.use("/uploads", express.static("uploads"));
 app.use("/api/feedback", feedbackRoutes);
 app.use("/api/education", educationRoutes);
-// ==================
-// ✅ INIT DB
-// ==================
 
 app.get("/init-db", async (req, res) => {
   try {
@@ -76,7 +62,6 @@ app.get("/init-db", async (req, res) => {
         password TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-
       CREATE TABLE IF NOT EXISTS about (
         id SERIAL PRIMARY KEY,
         name VARCHAR(100),
@@ -86,8 +71,6 @@ app.get("/init-db", async (req, res) => {
         phone VARCHAR(20),
         experience VARCHAR(50)
       );
-
-      -- 🔥 FIX HERE
       CREATE TABLE IF NOT EXISTS experience (
         id SERIAL PRIMARY KEY,
         company VARCHAR(100),
@@ -97,8 +80,6 @@ app.get("/init-db", async (req, res) => {
         description TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-
-      -- 🔥 FIX HERE
       CREATE TABLE IF NOT EXISTS education (
         id SERIAL PRIMARY KEY,
         degree VARCHAR(100),
@@ -108,7 +89,6 @@ app.get("/init-db", async (req, res) => {
         description TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-
       CREATE TABLE IF NOT EXISTS messages (
         id SERIAL PRIMARY KEY,
         name VARCHAR(100),
@@ -117,7 +97,6 @@ app.get("/init-db", async (req, res) => {
         is_read BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-
       CREATE TABLE IF NOT EXISTS projects (
         id SERIAL PRIMARY KEY,
         title VARCHAR(100),
@@ -129,7 +108,6 @@ app.get("/init-db", async (req, res) => {
         image TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-
       CREATE TABLE IF NOT EXISTS skills (
         id SERIAL PRIMARY KEY,
         name VARCHAR(100),
@@ -138,14 +116,12 @@ app.get("/init-db", async (req, res) => {
         icon TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-
       CREATE TABLE IF NOT EXISTS resume (
         id SERIAL PRIMARY KEY,
         title VARCHAR(100),
         file_url TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-
       CREATE TABLE IF NOT EXISTS feedback (
         id SERIAL PRIMARY KEY,
         name VARCHAR(100),
@@ -154,28 +130,17 @@ app.get("/init-db", async (req, res) => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-
     res.send("All tables created ✅");
-
   } catch (err) {
     res.status(500).send(err.message);
   }
 });
 
-// ==================
-// ✅ ROOT
-// ==================
-
 app.get("/", (req, res) => {
   res.send("API is running 🚀");
 });
 
-// ==================
-// ✅ SERVER START
-// ==================
-
 const PORT = process.env.PORT || 10000;
-
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
