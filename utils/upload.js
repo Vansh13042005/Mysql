@@ -1,28 +1,27 @@
 import supabase from "../config/supabase.js";
 import fs from "fs";
 
-export const uploadToSupabase = async (file) => {
+export const uploadResumeToSupabase = async (file) => {
+  const buffer = fs.readFileSync(file.path);
 
-  const fileBuffer = fs.readFileSync(file.path);
+  const fileName = `${Date.now()}_${file.originalname}`;
 
-  const fileName =
-    Date.now() + "_" + file.originalname;
-
-  const { data, error } =
-    await supabase.storage
-      .from("projects")
-      .upload(fileName, fileBuffer, {
-        contentType: file.mimetype,
-      });
+  const { error } = await supabase.storage
+    .from("resume")
+    .upload(fileName, buffer, {
+      contentType: file.mimetype,
+    });
 
   if (error) {
     throw error;
   }
 
-  const { data: publicUrl } =
-    supabase.storage
-      .from("projects")
-      .getPublicUrl(fileName);
+  const { data } = supabase.storage
+    .from("resume")
+    .getPublicUrl(fileName);
 
-  return publicUrl.publicUrl;
+  // local temp file delete
+  fs.unlinkSync(file.path);
+
+  return data.publicUrl;
 };
