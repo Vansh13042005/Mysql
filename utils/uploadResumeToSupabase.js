@@ -1,5 +1,4 @@
-// utils/uploadResumeToSupabase.js
-import supabase from "../config/supabase.js";
+import { supabase } from "../config/supabase.js"; // ✅ named import
 
 export const uploadResumeToSupabase = async (file) => {
   const fileName = `${Date.now()}-${file.originalname.replace(/\s+/g, "_")}`;
@@ -13,7 +12,6 @@ export const uploadResumeToSupabase = async (file) => {
 
   if (error) throw new Error(`Supabase upload failed: ${error.message}`);
 
-  // Public URL banao
   const { data: urlData } = supabase.storage
     .from("resume")
     .getPublicUrl(fileName);
